@@ -19,73 +19,143 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Sydney McDaniel, sbm2374
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+The first data set used in this project is one that includes an overview of medical school admissions, including variables such as total applicants (grouped by in-state and out-of-state and gender), matriculates (grouped by in-state and out-of-state and gender) and location of the medical school. The second data set is one that includes an overview of test statistics related to medical school admissions. This data set includes variables such as the average GPA and average MCAT of matriculated applicants. Other variables include the minimum MCAT score of accepted students, as well as the state and region in which the school is located. 
 
+I chose these data sets, as I am a pre-med student myself. I think it will be interesting to see associations between different admissions variables. I'm particularly curious in exploring the gender variables, and they compare with variables like MCAT and GPA. Before performing any analyses, I'm predicting that schools with higher percentages of female matriculates will have overall higher average MCAT scores. 
+
+#### Uploading Data
+
+Some of the data uploaded had columns containing variables that were converted to be numeric, for the purpose of calculations further in the project.
 ```{R}
-# read your datasets in here, e.g., with read_csv()
+library(tidyverse)
+library(readxl)
+medschool_stats <- read_excel("~/project1/medschool_stats.xlsx", 
+    col_types = c("text", "text", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric"))
 
+MedicalSchoolTestStats <- read_excel("~/project1/MedicalSchoolTestStats.xlsx", 
+    col_types = c("text", "text", "text", 
+        "numeric", "numeric", "numeric", 
+        "text"))
 ```
 
-#### Tidying: Reshaping
-
-If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+#### Here, we can observe the data before any editing has been performed.
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
+glimpse(medschool_stats)
+glimpse(MedicalSchoolTestStats)
+```
+#### Cleaning the Data Sets
+
+The tidy functions will be performed later in this file, when the wrangling section is performed. However, a few columns will be dropped from these data sets.  
+
+```{R}
+medschool_stats <- medschool_stats %>% select(-State) 
+MedicalSchoolTestStats <- MedicalSchoolTestStats %>% select(-`Minimum MCAT`)
 ```
 
-    
 #### Joining/Merging
 
 ```{R}
-# your joining code
-
-# your joining code
+joined_data <- full_join(medschool_stats, MedicalSchoolTestStats, by = c("MedicalSchool"="Medical School"))
+glimpse(joined_data)
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+The full_join function is used to combine these two data sets by the unique identifier "Medical School" and "MedicalSchool", as there is an equivalent amount of rows in "MedicalSchoolTestStatistics" and "medschool_stats"; this can be attributed to the fact that there are only that many medical schools in the United States. There were 156 unique rows in each of the following data sets prior to the join; following the join, there are 164 rows; this may be attributed to the fact that either data set has a different name for the same medical school [e.g., UCLA or University of California, Los Angeles]. Prior to the join, the data set "Medical School Test Statistics" had the unique IDs Average GPA, Region, and Minimum MCAT score. On the other hand, "Medical School Stats" contained more unique IDs relating to gender, such as the percentage of female/male applicants and matriculates. 
 
 ####  Wrangling
 
 ```{R}
-# your wrangling code
-
-# your wrangling code
-
-# your wrangling code
+joined_data <- joined_data %>% select(-"AverageMCAT") %>% select(-"Degree Type")
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+The variables "Average MCAT" and "Degree Type" were removed from the joined data set using the select() function, as the former was already present in the MedicalSchoolTestStats data set, while the latter is not relevant to further analyses. 
 
+```{R}
+joined_data %>% summarize_all(function(x)sum(is.na(x)))
+```
+There are 2 NAs for state, 12 for Average GPA, and 17 for Average MCAT.
+
+#### Summarizing Numerical Variables
+
+A variable to quantify the number of female applicants was generated using the mutate() function. First, the percentage of female applicants needed to be converted into a frequency. Then, the frequency was multipled by the total applicants. By using the arrange() function, we can see that approximately 7,707 females applied to Georgetown. By using filter(str_detect()), we can see that UT Southwestern had 3,054 female applicants- my top choice for medical school! 
+
+```{R}
+joined_data <- joined_data %>% mutate(freqfemale = percentfemale/100) %>% mutate(femaleapplicants = freqfemale*Applications)
+joined_data %>% arrange(desc(femaleapplicants))
+joined_data %>% filter(str_detect(MedicalSchool, "UT Southwestern"))
+```
+
+By looking at the mean of all variables, we gain some interesting facts. For example, the average yearly number of matriculates for medical schools across the United States is 148. An average of 44% of those matriculates are female, while 55% are male. 
+
+```{R}
+joined_data %>% summarize_if(is.double, mean) %>% glimpse(100)
+```
+
+The table below contains the mean and standard deviation of the following numerical values: total applications, percent of applicants in state, and percent of applications out of state. The variables were initially grouped by state. Then, the pivot_longer(-1) was used to increase the number of rows, while decreasing the number of columns. The separate() function needed to be used to separate between the name of the variable and the stat function that was applied. Finally, pivot_wider() was used to generate the resulting table, with more columns and less rows. When arranging by descending order of total applications, we can see that Oregon received the most, with 16,682.
+
+```{R}
+table1 <- joined_data %>% group_by(State) %>% filter(!is.na(State)) %>% summarize_at(c("Applications", "Instate", "Outofstate", "percentfemale", "percentmale"), .funs=list(mean=mean,sd=sd, median=median, min=min, max=max)) %>% 
+  pivot_longer(-1) %>% separate(name, into=c("name","stat")) %>% pivot_wider()
+table1 %>% arrange(desc(Applications))
+table1 %>% arrange(desc(percentfemale))
+```
+
+#### Summarizing Categorical Variables
+
+The table below classifies the amount of medical schools found in each region in the United States. The region with the most medical schools is the South (53 schools), while the region with the least medical schools is the West (29 schools)
+
+```{R}
+table2 <- joined_data %>% count(Region) %>% filter(!is.na(Region))
+library(gt)
+table2 %>% gt %>%
+  tab_header(title=md("**Categorical Variables Summary Statistics**"),
+             subtitle=md("Number of Medical Schools Per Region"))
+```
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+joined_data %>% filter(!is.na(Region)) %>% ggplot(aes(femalematriculants)) + 
+  geom_histogram(aes(y=..density..), colour="black", fill="white")+
+  geom_density(alpha=.2, fill="yellow") + 
+  facet_wrap(~Region) + geom_density(alpha=.2, fill="#FF6666") + 
+  theme_minimal() + ggtitle("Distribution of Female Matriculates") + 
+  scale_x_continuous(breaks = seq(from = 30, to = 60, by = 10), name = "Proportion of Female Matriculates")
+
 ```
 
-Your discussion of plot 1
+There appears to be the highest frequency of female matriculates to medical schools in the South and Midwest regions, whereas the West region contains the lowest frequency of female matriculates. This may be attributed to the lower annual average applications that the West receives, as well as its overall lack of medical schools.
 
 ```{R}
-# your plot 2
+joined_data %>% ggplot(aes(x = State)) + 
+  geom_bar(aes(y = femaleapplicants), stat = 'summary', width = 0.5, 
+    position = position_dodge(0.8), fill = "pink", color = "red") + 
+  ggtitle("Number of Female Applicants by State") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_x_discrete(name = " States") + 
+  scale_y_continuous(breaks = seq(from = 0, to = 7000, by = 1000), name = "Number of Female Applicants")
+
 ```
 
-Your discussion of plot 2
+As depicted by the graph above, Oregon received the highest amount of female applicants. On the other hand, Missouri and Hawaii received the lowest number of female applicants.
 
 ```{R}
-# your plot 3
+joined_data %>% ggplot(aes(x=`Average GPA`, y=`Average MCAT`)) + 
+  geom_density2d_filled() + geom_point() + 
+  scale_y_continuous(breaks = seq(from = 500, to = 528, by = 4), name = "Average MCAT Score") + 
+  theme(panel.background = element_rect(fill = "white", colour = "grey50")) + 
+  ggtitle("Average MCAT vs. Average GPA of Medical School Matriculates") + 
+  geom_smooth(method="lm", colour = "white")
 ```
 
-Your discussion of plot 3
-
-#### Concluding Remarks
-
-If any!
-
-
+The areas of the plot with the greatest "density" of GPA and MCAT scores is depicted by the yellow region; the purple area shows the least "density" of GPA and MCAT scores. In other words, most matriculates have an average GPA around 3.75, and an average MCAT score around 510. As depicted by the white trend line, there is a positive correlation between a matriculates average GPA and MCAT score.
 
 
